@@ -1,9 +1,10 @@
 from __future__ import annotations
 import httpx
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Callable, Optional
 from .normalize import normalize_key
 
 SUPPORTED_SCHEMES = ("vless://", "vmess://", "trojan://", "ss://", "hysteria://", "hysteria2://", "hy2://")
+
 
 class SourceFetchError(Exception):
     def __init__(self, url: str, reason: str):
@@ -45,7 +46,10 @@ def extract_proxy_lines(text: str) -> List[str]:
     return lines
 
 
-def merge_sources(urls: List[str]) -> Tuple[List[str], Dict[str, Set[str]]]:
+def merge_sources(
+    urls: List[str],
+    progress_fn: Optional[Callable] = None,
+) -> Tuple[List[str], Dict[str, Set[str]]]:
     global_pool: List[str] = []
     seen_global: Set[str] = set()
     source_map: Dict[str, Set[str]] = {}
@@ -53,11 +57,14 @@ def merge_sources(urls: List[str]) -> Tuple[List[str], Dict[str, Set[str]]]:
     for idx, url in enumerate(urls, start=1):
         try:
             txt = fetch_text(url)
-        except SourceFetchError:
+        except SourceFetchError as e:
             source_map[url] = set()
+            if progress_fn:
+                progress_fn(idx, len(urls), url, 0, 0, error=str(e))
             continue
         proxy_lines = extract_proxy_lines(txt)
         local_set: Set[str] = set()
+        new_count = 0
         for line in proxy_lines:
             key = normalize_key(line)
             if key in local_set:
@@ -66,5 +73,9 @@ def merge_sources(urls: List[str]) -> Tuple[List[str], Dict[str, Set[str]]]:
             if key not in seen_global:
                 global_pool.append(line)
                 seen_global.add(key)
+                new_count += 1
         source_map[url] = local_set
+        if progress_fn:
+            progress_fn(idx, len(urls), url, len(local_set), new_count)
+
     return global_pool, source_map

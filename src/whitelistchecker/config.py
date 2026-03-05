@@ -65,9 +65,9 @@ class Config:
     xray_startup_poll_interval: float = 0.2
     xray_path: str | None = None
     hysteria_path: str | None = None
-    egress_mode: str = "iptables"
+    egress_mode: str = "off"
     cidr_whitelist_url: str = "https://raw.githubusercontent.com/hxehex/russia-mobile-internet-whitelist/refs/heads/main/cidrwhitelist.txt"
-    speed_test_enabled: bool = False
+    speed_test_enabled: bool = True
     speed_test_timeout: int = 2
     speed_test_mode: str = "latency"
     speed_test_metric: str = "latency"
@@ -84,6 +84,7 @@ class Config:
     engine_mode: str = "real"  # real|stub
 
     cidr_whitelist_file: str | None = None
+    keep_only_whitelist_files: bool = True
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -180,6 +181,7 @@ def load_config(args: list[str] | None = None) -> Config:
     cfg.use_notworkers = env_bool("USE_NOTWORKERS", cfg.use_notworkers)
 
     cfg.engine_mode = ns.engine_mode or env("ENGINE_MODE", cfg.engine_mode)
+    cfg.keep_only_whitelist_files = env_bool("KEEP_ONLY_WHITELIST_FILES", cfg.keep_only_whitelist_files)
 
     # split lists from env if provided
     env_test_urls = env("TEST_URLS")
