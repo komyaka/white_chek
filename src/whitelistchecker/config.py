@@ -171,14 +171,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _first(*values):
-    """Return the first non-None value, or None if all are None."""
-    for v in values:
-        if v is not None:
-            return v
-    return None
-
-
 def _first_bool(cli_val, env_name: str, default: bool) -> bool:
     """CLI flag → env var → default for boolean options."""
     if cli_val is not None:
