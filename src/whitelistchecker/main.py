@@ -211,15 +211,35 @@ def main(argv=None):
     # --- Egress ---
     cidrs = []
     if cfg.egress_mode != "off":
-        console.print(f"[yellow]Applying egress whitelist (mode={cfg.egress_mode})...[/yellow]")
-        if cfg.cidr_whitelist_file and Path(cfg.cidr_whitelist_file).exists():
-            cidrs = [ln.strip() for ln in Path(cfg.cidr_whitelist_file).read_text().splitlines() if ln.strip()]
-        else:
-            cidrs = fetch_cidr_list(cfg.cidr_whitelist_url)
+        console.print(f"[yellow]Applying egress whitelist (mode={cfg.egress_mode}, backend={cfg.egress_backend})...[/yellow]")
+        try:
+            if cfg.cidr_whitelist_file and Path(cfg.cidr_whitelist_file).exists():
+                cidrs = [ln.strip() for ln in Path(cfg.cidr_whitelist_file).read_text().splitlines() if ln.strip()]
+                if not cidrs:
+                    console.print(f"[red]CIDR file '{cfg.cidr_whitelist_file}' is empty. "
+                                  "Cannot apply egress whitelist.[/red]")
+                    sys.exit(1)
+            else:
+                cidrs = fetch_cidr_list(cfg.cidr_whitelist_url)
+                if not cidrs:
+                    console.print(f"[red]CIDR list from '{cfg.cidr_whitelist_url}' is empty. "
+                                  "Cannot apply egress whitelist.[/red]")
+                    sys.exit(1)
+        except Exception as exc:
+            console.print(f"[red]Failed to load CIDR list: {exc}[/red]")
+            console.print("[red]Cannot apply egress whitelist. "
+                          "Check CIDR_WHITELIST_URL / CIDR_WHITELIST_FILE or use "
+                          "--egress-mode off --egress-allow-off to disable egress.[/red]")
+            sys.exit(1)
         console.print(f"[blue]{len(cidrs)} CIDRs loaded[/blue]")
 
     # --- Engine checks ---
-    with apply_egress_whitelist(cidrs, mode=cfg.egress_mode):
+    with apply_egress_whitelist(
+        cidrs,
+        mode=cfg.egress_mode,
+        egress_backend=cfg.egress_backend,
+        allow_off=cfg.egress_allow_off,
+    ):
         if cfg.engine_mode == "stub":
             console.print("[yellow]Engine mode: stub (all keys marked OK)[/yellow]")
             ok_results = _run_checks_stub(global_pool, cfg, cfg.base_port)
