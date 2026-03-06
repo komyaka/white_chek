@@ -22,15 +22,11 @@ class XrayResult:
 
 
 def ensure_binary(path: Optional[str] = None) -> str:
-    candidate = path or os.environ.get("XRAY_PATH") or "xray"
-    if not os.path.isabs(candidate):
-        resolved = shutil.which(candidate)
-        if resolved is None:
-            raise FileNotFoundError(f"Xray binary not found: {candidate}")
-        return resolved
-    if not os.path.exists(candidate):
-        raise FileNotFoundError(f"Xray binary not found: {candidate}")
-    return candidate
+    from ..download import ensure_binary as _ensure, BinaryDownloadError
+    try:
+        return _ensure("xray", explicit_path=path, env_var="XRAY_PATH")
+    except BinaryDownloadError as exc:
+        raise FileNotFoundError(str(exc)) from exc
 
 
 def build_config(uri: str, socks_port: int) -> dict:

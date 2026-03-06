@@ -21,15 +21,11 @@ class HysteriaResult:
 
 
 def ensure_binary(path: Optional[str] = None) -> str:
-    candidate = path or os.environ.get("HYSTERIA_PATH") or "hysteria"
-    if not os.path.isabs(candidate):
-        resolved = shutil.which(candidate)
-        if resolved is None:
-            raise FileNotFoundError(f"Hysteria binary not found: {candidate}")
-        return resolved
-    if not os.path.exists(candidate):
-        raise FileNotFoundError(f"Hysteria binary not found: {candidate}")
-    return candidate
+    from ..download import ensure_binary as _ensure, BinaryDownloadError
+    try:
+        return _ensure("hysteria", explicit_path=path, env_var="HYSTERIA_PATH")
+    except BinaryDownloadError as exc:
+        raise FileNotFoundError(str(exc)) from exc
 
 
 def _wait_for_port(port: int, timeout: float = 3.0) -> bool:

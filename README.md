@@ -10,9 +10,11 @@ whitelist.
 ## Требования
 
 - Python 3.11+
-- Для режима `real` нужны бинарники `xray` и/или `hysteria` в `$PATH`
-  (см. раздел «Бинарники движков»)
-- Для egress‑режимов `iptables` и `linux-netns` нужен root
+- Для режима `real` нужны бинарники `xray` и/или `hysteria` в `$PATH`.
+  Если бинарник не найден, он будет **автоматически загружен** из официального
+  GitHub-релиза и сохранён в `~/.cache/white_chek/bin` (см. раздел «Бинарники движков»).
+- Для egress‑режимов `iptables` и `linux-netns` нужен root на Linux.
+- Для egress-режима `docker` нужен работающий Docker (Windows или Linux).
 
 ---
 
@@ -28,14 +30,12 @@ cp .env.example .env
 ## Быстрый старт (пример работы)
 
 ```bash
-# Создайте файл со ссылками (по одной ссылке на строку)
-echo "https://raw.githubusercontent.com/example/proxies/main/list.txt" > links.txt
-
-# Запуск (egress выключен, speedtest выключен — безопасный первый запуск)
+# Запуск с явным отключением egress (требует флага подтверждения)
 whitelist-checker \
   --links-file links.txt \
   --output-dir configs \
   --egress-mode off \
+  --egress-allow-off \
   --no-speedtest
 
 # Запуск в stub‑режиме (без реальных движков и без доступа в интернет)
@@ -44,6 +44,7 @@ whitelist-checker \
   --output-dir configs \
   --engine-mode stub \
   --egress-mode off \
+  --egress-allow-off \
   --no-speedtest
 ```
 
@@ -64,7 +65,7 @@ configs/white-list_available_source_stats.txt
 ### Дымовой тест (реальные источники, egress off, speedtest off)
 
 ```bash
-# 1. Создать минимальный файл ссылок
+# Дымовой тест (реальные источники, egress off — явное подтверждение, speedtest off)
 cat > /tmp/smoke_links.txt << 'EOF'
 # Добавьте 1–2 реальных URL со списками прокси
 https://raw.githubusercontent.com/example/list/main/proxies.txt
@@ -75,6 +76,7 @@ whitelist-checker \
   --links-file /tmp/smoke_links.txt \
   --output-dir /tmp/smoke_out \
   --egress-mode off \
+  --egress-allow-off \
   --no-speedtest
 
 # 3. Проверить, что создано 5 файлов
@@ -92,6 +94,12 @@ ls /tmp/smoke_out/
 ```bash
 # Запуск только stub‑интеграционного теста
 python -m pytest tests/test_integration_stub.py -v
+
+# Запуск только egress-тестов
+python -m pytest tests/test_egress.py -v
+
+# Запуск только download-тестов (всё замокано, без сети)
+python -m pytest tests/test_download.py -v
 
 # Запуск всех тестов
 python -m pytest tests/ -v
@@ -135,11 +143,28 @@ python -m pytest tests/ -v
 
 ## Режимы egress
 
+По умолчанию egress включён (`enforced`) — автоматически выбирается лучший backend.
+Чтобы **явно** отключить egress, нужно передать `--egress-mode off --egress-allow-off`
+(или `EGRESS_ALLOW_OFF=true`).
+
 | Режим | Поведение |
 |---|---|
-| `off` | Без ограничений сети (по умолчанию) |
+| `enforced` | **(по умолчанию)** Автовыбор: `iptables` на Linux, `docker` на Windows. Завершается с ошибкой, если нужный backend недоступен. |
 | `iptables` | Выставляет `OUTPUT=DROP`, разрешает lo, ESTABLISHED/RELATED, DNS на 8.8.8.8/8.8.4.4/1.1.1.1 и CIDR‑список. Правила откатываются при выходе. |
-| `linux-netns` | Создаёт netns с veth (10.200.0.0/24), включает MASQUERADE на host‑iptables и применяет те же правила внутри netns. Полная очистка при выходе. |
+| `linux-netns` | Создаёт netns с veth, включает MASQUERADE и применяет те же правила. Полная очистка при выходе. |
+| `docker` | Запускает Alpine-контейнер с `NET_ADMIN`, применяет iptables-правила внутри контейнера. Контейнер удаляется при выходе. Работает на Windows и Linux. |
+| `off` | Без ограничений сети. **Требует** флага `--egress-allow-off` (или `EGRESS_ALLOW_OFF=true`). |
+
+### EGRESS_BACKEND
+
+Переменная `EGRESS_BACKEND` (или `--egress-backend`) позволяет явно выбрать backend:
+- `native` — использовать iptables напрямую (по умолчанию на Linux)
+- `docker` — использовать Docker/Podman (переопределяет автовыбор)
+
+### Если CIDR-список недоступен
+
+Если `CIDR_WHITELIST_URL` / `CIDR_WHITELIST_FILE` не загружается или пуст, программа
+завершится с ошибкой и чётким сообщением. Пустой список не принимается.
 
 > **Важно:** `iptables` и `linux-netns` требуют root‑доступа и всегда откатываются даже при аварийном завершении.
 
@@ -159,7 +184,9 @@ python -m pytest tests/ -v
 | `--default-list-url` | — | Резервный URL (пока не используется в коде) |
 | `--output-dir` | `configs` | Директория для результатов |
 | `--output-file` | `white-list_available` | Базовое имя выходных файлов |
-| `--egress-mode` | `off` | Ограничение сети: `off`, `iptables`, `linux-netns` |
+| `--egress-mode` | `enforced` | Ограничение сети: `enforced`, `off`, `iptables`, `linux-netns`, `docker` |
+| `--egress-backend` | `native` | Backend для режима enforced/docker: `native` (iptables), `docker` |
+| `--egress-allow-off` | выключен | Подтверждение для `--egress-mode off` (обязателен при отключении egress) |
 | `--cidr-whitelist-url` | `https://raw.githubusercontent.com/hxehex/russia-mobile-internet-whitelist/refs/heads/main/cidrwhitelist.txt` | URL со списком CIDR для egress‑режимов |
 | `--cidr-whitelist-file` | — | Локальный файл CIDR (имеет приоритет над URL) |
 | `--engine-mode` | `real` | `real` (Xray/Hysteria) или `stub` (все ключи OK) |
@@ -297,9 +324,11 @@ python -m pytest tests/ -v
 
 | Переменная | По умолчанию | Описание |
 |---|---|---|
-| `EGRESS_MODE` | `off` | `off`, `iptables`, `linux-netns` |
+| `EGRESS_MODE` | `enforced` | `enforced`, `off`, `iptables`, `linux-netns`, `docker` |
+| `EGRESS_BACKEND` | `native` | `native` (iptables) или `docker` |
+| `EGRESS_ALLOW_OFF` | `false` | Установить `true`, чтобы разрешить `EGRESS_MODE=off` |
 | `CIDR_WHITELIST_URL` | `https://raw.githubusercontent.com/hxehex/russia-mobile-internet-whitelist/refs/heads/main/cidrwhitelist.txt` | URL для CIDR‑списка |
-| `CIDR_WHITELIST_FILE` | пусто | Локальный файл CIDR |
+| `CIDR_WHITELIST_FILE` | пусто | Локальный файл CIDR (имеет приоритет над URL) |
 
 ### Speedtest
 
@@ -332,7 +361,23 @@ python -m pytest tests/ -v
 - **Xray** используется для `vless://`, `vmess://`, `trojan://`, `ss://`
 - **Hysteria** используется для `hysteria://`, `hysteria2://`, `hy2://`
 
-Бинарники ищутся в `$PATH`. Переопределить можно через `XRAY_PATH` / `HYSTERIA_PATH`
+### Автоматическая загрузка
+
+Если бинарник не найден в `$PATH`, он будет **автоматически загружен** из официального
+GitHub-релиза и сохранён в `~/.cache/white_chek/bin`:
+
+| Платформа | Архитектура | Поддержка |
+|---|---|---|
+| Linux | x86_64 | ✅ |
+| Linux | arm64 / aarch64 | ✅ |
+| Windows | x64 | ✅ |
+| macOS | любая | ❌ (установите вручную) |
+
+После загрузки SHA-256 дайджест бинарника проверяется по файлу с GitHub-релиза.
+При несовпадении хеша — ошибка с чётким сообщением.
+Файлы кешируются и повторно не загружаются при следующих запусках.
+
+Переопределить путь можно через `XRAY_PATH` / `HYSTERIA_PATH`
 или флаги `--xray-path` / `--hysteria-path`.
 
 ---

@@ -57,6 +57,7 @@ def test_stub_pipeline_produces_5_files():
         env_overrides = {
             "ENGINE_MODE": "stub",
             "EGRESS_MODE": "off",
+            "EGRESS_ALLOW_OFF": "true",
             "SPEED_TEST_ENABLED": "false",
             "RECHECK_PREVIOUS_WHITELISTS": "false",
             "USE_NOTWORKERS": "false",
@@ -73,6 +74,7 @@ def test_stub_pipeline_produces_5_files():
                     "--output-dir", output_dir,
                     "--engine-mode", "stub",
                     "--egress-mode", "off",
+                    "--egress-allow-off",
                     "--no-speedtest",
                 ])
 
@@ -92,6 +94,7 @@ def test_stub_pipeline_source_stats():
                 "--output-dir", output_dir,
                 "--engine-mode", "stub",
                 "--egress-mode", "off",
+                    "--egress-allow-off",
                 "--no-speedtest",
             ])
 
@@ -120,6 +123,7 @@ def test_stub_pipeline_notworkers_exclusion():
                 "--output-dir", output_dir,
                 "--engine-mode", "stub",
                 "--egress-mode", "off",
+                    "--egress-allow-off",
                 "--no-speedtest",
                 "--use-notworkers",
                 "--no-recheck-previous",
@@ -160,6 +164,7 @@ def test_stub_pipeline_notworkers_append():
                         "--output-dir", output_dir,
                         "--engine-mode", "stub",
                         "--egress-mode", "off",
+                    "--egress-allow-off",
                         "--no-speedtest",
                         "--use-notworkers",
                         "--no-recheck-previous",
@@ -183,6 +188,7 @@ def test_stub_pipeline_speedtest_produces_st_files():
                 "--output-dir", output_dir,
                 "--engine-mode", "stub",
                 "--egress-mode", "off",
+                    "--egress-allow-off",
                 "--no-speedtest",
                 "--no-recheck-previous",
             ])

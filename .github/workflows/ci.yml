@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~\AppData\Local\pip\Cache
+          key: pip-${{ matrix.os }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-${{ matrix.os }}-
+
+      # Cache auto-downloaded engine binaries so they are not re-fetched on every run.
+      - name: Cache engine binaries (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/white_chek/bin
+          key: bins-linux-${{ runner.arch }}
+
+      - name: Cache engine binaries (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\white_chek\bin
+          key: bins-windows-${{ runner.arch }}
+
+      - name: Install package and test dependencies
+        run: |
+          pip install -e ".[dev]" || pip install -e . pytest
+
+      - name: Run tests (Linux – egress tests need no root, all mocked)
+        if: runner.os == 'Linux'
+        run: python -m pytest tests/ -v
+
+      - name: Check Docker availability (Windows)
+        if: runner.os == 'Windows'
+        id: docker_check
+        shell: pwsh
+        run: |
+          $available = $false
+          try {
+            $result = docker info 2>&1
+            if ($LASTEXITCODE -eq 0) { $available = $true }
+          } catch {}
+          echo "docker_available=$available" >> $env:GITHUB_OUTPUT
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          DOCKER_AVAILABLE: ${{ steps.docker_check.outputs.docker_available }}
+        run: |
+          # All egress tests are mocked; no real Docker/iptables required.
+          python -m pytest tests/ -v

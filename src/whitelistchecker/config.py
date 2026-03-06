@@ -65,7 +65,9 @@ class Config:
     xray_startup_poll_interval: float = 0.2
     xray_path: str | None = None
     hysteria_path: str | None = None
-    egress_mode: str = "off"
+    egress_mode: str = "enforced"
+    egress_backend: str = "native"
+    egress_allow_off: bool = False
     cidr_whitelist_url: str = "https://raw.githubusercontent.com/hxehex/russia-mobile-internet-whitelist/refs/heads/main/cidrwhitelist.txt"
     speed_test_enabled: bool = True
     speed_test_timeout: int = 2
@@ -97,7 +99,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--output-file")
     p.add_argument("--cidr-whitelist-url")
     p.add_argument("--cidr-whitelist-file")
-    p.add_argument("--egress-mode", choices=["off", "iptables", "linux-netns"])
+    p.add_argument("--egress-mode", choices=["off", "enforced", "iptables", "linux-netns", "docker"])
+    p.add_argument("--egress-backend", choices=["native", "docker"], dest="egress_backend")
+    p.add_argument(
+        "--egress-allow-off",
+        dest="egress_allow_off",
+        action="store_true",
+        default=None,
+        help="Confirm you intentionally want to disable egress enforcement (required with --egress-mode off)",
+    )
     p.add_argument("--xray-path")
     p.add_argument("--hysteria-path")
     p.add_argument("--engine-mode", choices=["real", "stub"], dest="engine_mode")
@@ -167,6 +177,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         strong_style_test=None,
         strong_double_check=None,
         keep_only_whitelist_files=None,
+        egress_allow_off=None,
+        egress_backend=None,
     )
     return p
 
@@ -220,6 +232,8 @@ def load_config(args: list[str] | None = None) -> Config:
     cfg.cidr_whitelist_url = _first_str(ns.cidr_whitelist_url, "CIDR_WHITELIST_URL", cfg.cidr_whitelist_url)
     cfg.cidr_whitelist_file = _first_str(ns.cidr_whitelist_file, "CIDR_WHITELIST_FILE", cfg.cidr_whitelist_file)
     cfg.egress_mode = _first_str(ns.egress_mode, "EGRESS_MODE", cfg.egress_mode)
+    cfg.egress_backend = _first_str(ns.egress_backend, "EGRESS_BACKEND", cfg.egress_backend)
+    cfg.egress_allow_off = _first_bool(ns.egress_allow_off, "EGRESS_ALLOW_OFF", cfg.egress_allow_off)
     cfg.xray_path = _first_str(ns.xray_path, "XRAY_PATH", cfg.xray_path)
     cfg.hysteria_path = _first_str(ns.hysteria_path, "HYSTERIA_PATH", cfg.hysteria_path)
     cfg.engine_mode = _first_str(ns.engine_mode, "ENGINE_MODE", cfg.engine_mode)
